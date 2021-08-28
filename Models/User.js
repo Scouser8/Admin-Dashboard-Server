@@ -1,42 +1,33 @@
 const mongoose = require("mongoose");
 const { isEmail } = require("validator");
 
-const userSchema = mongoose.Schema({
-  id: {
-    type: Number,
+const userSchema = mongoose.Schema(
+  {
+    email: {
+      type: "String",
+      unique: true,
+      required: true,
+      validate: [isEmail, "Please enter a valid email"],
+    },
+    password: {
+      type: "String",
+      required: true,
+    },
+    first_name: {
+      type: "String",
+      required: true,
+    },
+    last_name: {
+      type: "String",
+      required: true,
+    },
+    status: {
+      type: "String",
+      default: "inactive",
+    },
   },
-  user_name: {
-    type: "String",
-    unique: true,
-    required: true,
-  },
-  email: {
-    type: "String",
-    unique: true,
-    required: true,
-    validate: [isEmail, "Please enter a valid email"],
-  },
-  password: {
-    type: "String",
-    required: true,
-  },
-  first_name: {
-    type: "String",
-    required: true,
-  },
-  last_name: {
-    type: "String",
-    required: true,
-  },
-  status: {
-    type: "String",
-    default: "inactive",
-  },
-  dateCreated: {
-    type: Date,
-    default: Date.now(),
-  },
-});
+  { timestamps: true }
+);
 
 // To prevent sending the password when returning
 // the user object to the client.

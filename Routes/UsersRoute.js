@@ -38,6 +38,7 @@ router.post("/add", (req, res) => {
 
           Users.create(newUser, (err, data) => {
             if (err) {
+              console.log(err);
               res.status(500).send("Error");
             } else {
               res.status(201).send("New user created successfully");
@@ -116,9 +117,8 @@ router.get("/", (req, res) => {
   const orderAscOrDec = req.query.order || "asc";
   const columnToOrderBy = req.query.orderBy || "_id";
 
-  let totalCount;
-
   Users.find({})
+    .collation({ locale: "en" })
     .sort({ [columnToOrderBy]: orderAscOrDec })
     .skip(recordsPerPage * currentTablePage)
     .limit(recordsPerPage)
@@ -136,13 +136,16 @@ router.get("/", (req, res) => {
 
 router.put("/:id", (req, res) => {
   let userToEdit = req.params.id;
-  const newUser = req.body;
-  console.log(newUser);
+  const user = req.body;
 
   Users.findOneAndUpdate(
     { _id: userToEdit },
-    newUser,
-    { upsert: true },
+    {
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+    },
+    // { upsert: true },
     function (err, users) {
       if (err) {
         res.status(500).send("Edit Failed");
