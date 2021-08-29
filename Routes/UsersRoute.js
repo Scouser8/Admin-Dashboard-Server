@@ -84,19 +84,21 @@ router.post("/login", (req, res) => {
 //Search for specific users
 
 router.get("/filter", (req, res) => {
-  const columnToFilter = req.query.column || "first_name";
+  // const columnToFilter = req.query.column || "first_name";
   const dataToMatch = req.query.searchValue || "";
   const recordsPerPage = parseInt(req.query.recordsPerPage) || 10;
   const currentTablePage = parseInt(req.query.pageNumber) || 0;
   const orderAscOrDec = req.query.order || "asc";
   const columnToOrderBy = req.query.orderBy || "_id";
 
-  console.log(req.query);
-  console.log(dataToMatch);
-  console.log(recordsPerPage);
-  console.log(currentTablePage);
-
-  Users.find({ [columnToFilter]: { $regex: `^${dataToMatch}` } })
+  Users.find({
+    $or: [
+      { first_name: { $regex: `^${dataToMatch}`, $options: "i" } },
+      { last_name: { $regex: `^${dataToMatch}`, $options: "i" } },
+      { email: { $regex: `^${dataToMatch}`, $options: "i" } },
+      { status: { $regex: `^${dataToMatch}`, $options: "i" } },
+    ],
+  })
     .sort({ [columnToOrderBy]: orderAscOrDec })
     .limit(recordsPerPage)
     .exec((err, users) => {
