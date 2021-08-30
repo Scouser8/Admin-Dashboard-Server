@@ -50,6 +50,69 @@ router.post("/add", (req, res) => {
   });
 });
 
+//Create a new user
+router.put("/change/password/:id", (req, res) => {
+  const credentials = req.body;
+  const userId = req.params.id;
+
+  if (credentials.new_password !== credentials.confirm_password) {
+    res
+      .status(400)
+      .json({ error: "New password & password confirmation not matching!" });
+    return;
+  }
+  if (credentials.old_password === credentials.new_password) {
+    res
+      .status(400)
+      .json({ error: "Old password & New password cannot be the same" });
+    return;
+  }
+  Users.findOne({ _id: userId }, (err, user) => {
+    if (err) throw err;
+    else if (!user) {
+      res.status(403).json({ error: "User not found" });
+    } else {
+      bcrypt.compare(
+        credentials.old_password,
+        user.password,
+        (err, isMatched) => {
+          if (!isMatched) {
+            res.status(400).json({
+              error: "Old password isn't correct",
+            });
+            return;
+          } else {
+            bcrypt.genSalt(10, (err, salt) =>
+              bcrypt.hash(credentials.new_password, salt, (err, hash) => {
+                if (err) throw err;
+                //   if(Users.find({password: hash}))
+                console.log(Users.find({ password: hash }));
+
+                // console.log(`Hashed password: ${newUser.password}`);
+
+                Users.findOneAndUpdate(
+                  { _id: userId },
+                  {
+                    password: hash,
+                  },
+                  // { upsert: true },
+                  function (err, users) {
+                    if (err) {
+                      res.status(500).send("Password change Failed");
+                    } else {
+                      res.status(201).send("Password changed successfully!");
+                    }
+                  }
+                );
+              })
+            );
+          }
+        }
+      );
+    }
+  });
+});
+
 //Authenticate user
 router.post("/login", (req, res) => {
   const userData = req.body;
@@ -134,6 +197,21 @@ router.get("/", (req, res) => {
     });
 });
 
+//Fetch single user
+
+router.get("/:id", (req, res) => {
+  let userId = req.params.id;
+
+  Users.findOne({ _id: userId }, (err, user) => {
+    if (err) {
+      res.status(500).send("Failed to fetch data");
+    } else {
+      console.log(user);
+      res.json({ data: user });
+    }
+  });
+});
+
 //Edit current user
 
 router.put("/:id", (req, res) => {
@@ -146,6 +224,7 @@ router.put("/:id", (req, res) => {
       email: user.email,
       first_name: user.first_name,
       last_name: user.last_name,
+      status: user.status,
     },
     // { upsert: true },
     function (err, users) {
