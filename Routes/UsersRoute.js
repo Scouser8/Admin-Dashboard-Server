@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const Users = require("../Models/User");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const verifyToken = require("../Middlewares/Auth");
 
 // Separate API to get the total users count if needed, however the total will be returned as a key also on others
 // APIs below which are feching either or users or searching for some of them.
@@ -51,7 +53,7 @@ router.post("/add", (req, res) => {
 });
 
 //Create a new user
-router.put("/change/password/:id", (req, res) => {
+router.put("/change/password/:id", verifyToken, (req, res) => {
   const credentials = req.body;
   const userId = req.params.id;
 
@@ -67,48 +69,57 @@ router.put("/change/password/:id", (req, res) => {
       .json({ error: "Old password & New password cannot be the same" });
     return;
   }
-  Users.findOne({ _id: userId }, (err, user) => {
-    if (err) throw err;
-    else if (!user) {
-      res.status(403).json({ error: "User not found" });
+
+  jwt.verify(req.token, "mysecretkey", (err, data) => {
+    if (err) {
+      res.status(403).send("Bad Token");
     } else {
-      bcrypt.compare(
-        credentials.old_password,
-        user.password,
-        (err, isMatched) => {
-          if (!isMatched) {
-            res.status(400).json({
-              error: "Old password isn't correct",
-            });
-            return;
-          } else {
-            bcrypt.genSalt(10, (err, salt) =>
-              bcrypt.hash(credentials.new_password, salt, (err, hash) => {
-                if (err) throw err;
-                //   if(Users.find({password: hash}))
-                console.log(Users.find({ password: hash }));
+      Users.findOne({ _id: userId }, (err, user) => {
+        if (err) throw err;
+        else if (!user) {
+          res.status(403).json({ error: "User not found" });
+        } else {
+          bcrypt.compare(
+            credentials.old_password,
+            user.password,
+            (err, isMatched) => {
+              if (!isMatched) {
+                res.status(400).json({
+                  error: "Old password isn't correct",
+                });
+                return;
+              } else {
+                bcrypt.genSalt(10, (err, salt) =>
+                  bcrypt.hash(credentials.new_password, salt, (err, hash) => {
+                    if (err) throw err;
+                    //   if(Users.find({password: hash}))
+                    console.log(Users.find({ password: hash }));
 
-                // console.log(`Hashed password: ${newUser.password}`);
+                    // console.log(`Hashed password: ${newUser.password}`);
 
-                Users.findOneAndUpdate(
-                  { _id: userId },
-                  {
-                    password: hash,
-                  },
-                  // { upsert: true },
-                  function (err, users) {
-                    if (err) {
-                      res.status(500).send("Password change Failed");
-                    } else {
-                      res.status(201).send("Password changed successfully!");
-                    }
-                  }
+                    Users.findOneAndUpdate(
+                      { _id: userId },
+                      {
+                        password: hash,
+                      },
+                      // { upsert: true },
+                      function (err, users) {
+                        if (err) {
+                          res.status(500).send("Password change Failed");
+                        } else {
+                          res
+                            .status(201)
+                            .send("Password changed successfully!");
+                        }
+                      }
+                    );
+                  })
                 );
-              })
-            );
-          }
+              }
+            }
+          );
         }
-      );
+      });
     }
   });
 });
@@ -129,10 +140,11 @@ router.post("/login", (req, res) => {
           throw err;
         }
         if (isMatched) {
-          console.log("Logged In");
-          res
-            .status(201)
-            .send({ message: "Logged In successfully", data: user });
+          jwt.sign({ user }, "mysecretkey", (err, token) => {
+            res
+              .status(201)
+              .send({ message: "Logged In successfully", data: user, token });
+          });
         } else {
           console.log("Failed");
           res.status(401).send("Wrong Password");
@@ -146,7 +158,7 @@ router.post("/login", (req, res) => {
 
 //Search for specific users
 
-router.get("/filter", (req, res) => {
+router.get("/filter", verifyToken, (req, res) => {
   // const columnToFilter = req.query.column || "first_name";
   const dataToMatch = req.query.searchValue || "";
   const recordsPerPage = parseInt(req.query.recordsPerPage) || 10;
@@ -154,99 +166,129 @@ router.get("/filter", (req, res) => {
   const orderAscOrDec = req.query.order || "asc";
   const columnToOrderBy = req.query.orderBy || "_id";
 
-  Users.find({
-    $or: [
-      { first_name: { $regex: `^${dataToMatch}`, $options: "i" } },
-      { last_name: { $regex: `^${dataToMatch}`, $options: "i" } },
-      { email: { $regex: `^${dataToMatch}`, $options: "i" } },
-      { status: { $regex: `^${dataToMatch}`, $options: "i" } },
-    ],
-  })
-    .sort({ [columnToOrderBy]: orderAscOrDec })
-    .limit(recordsPerPage)
-    .exec((err, users) => {
-      if (err) {
-        res.status(500).send("Not Filtered");
-      } else {
-        console.log(users?.length);
-        res.json({ data: users, totalCount: users?.length || 0 });
-      }
-    });
+  jwt.verify(req.token, "mysecretkey", (err, data) => {
+    if (err) {
+      res.status(403).send("Bad Token");
+    } else {
+      Users.find({
+        $or: [
+          { first_name: { $regex: `^${dataToMatch}`, $options: "i" } },
+          { last_name: { $regex: `^${dataToMatch}`, $options: "i" } },
+          { email: { $regex: `^${dataToMatch}`, $options: "i" } },
+          { status: { $regex: `^${dataToMatch}`, $options: "i" } },
+        ],
+      })
+        .sort({ [columnToOrderBy]: orderAscOrDec })
+        .limit(recordsPerPage)
+        .exec((err, users) => {
+          if (err) {
+            res.status(500).send("Not Filtered");
+          } else {
+            console.log(users?.length);
+            res.json({ data: users, totalCount: users?.length || 0 });
+          }
+        });
+    }
+  });
 });
 
 //Get all users
 
-router.get("/", (req, res) => {
+router.get("/", verifyToken, (req, res) => {
   const recordsPerPage = parseInt(req.query.recordsPerPage) || 10;
   const currentTablePage = parseInt(req.query.pageNumber) || 0;
   const orderAscOrDec = req.query.order || "asc";
   const columnToOrderBy = req.query.orderBy || "_id";
 
-  Users.find({})
-    .collation({ locale: "en" })
-    .sort({ [columnToOrderBy]: orderAscOrDec })
-    .skip(recordsPerPage * currentTablePage)
-    .limit(recordsPerPage)
-    .exec((err, users) => {
-      if (err) {
-        res.status(500).send("Pagination Failed");
-      } else {
-        console.log(users);
-        res.json({ data: users, totalCount: users?.length || 0 });
-      }
-    });
+  jwt.verify(req.token, "mysecretkey", (err, data) => {
+    if (err) {
+      res.status(403).send("Bad Token");
+    } else {
+      Users.find({})
+        .collation({ locale: "en" })
+        .sort({ [columnToOrderBy]: orderAscOrDec })
+        .skip(recordsPerPage * currentTablePage)
+        .limit(recordsPerPage)
+        .exec((err, users) => {
+          if (err) {
+            res.status(500).send("Pagination Failed");
+          } else {
+            console.log(users);
+            res.json({ data: users, totalCount: users?.length || 0 });
+          }
+        });
+    }
+  });
 });
 
 //Fetch single user
 
-router.get("/:id", (req, res) => {
+router.get("/:id", verifyToken, (req, res) => {
   let userId = req.params.id;
 
-  Users.findOne({ _id: userId }, (err, user) => {
+  jwt.verify(req.token, "mysecretkey", (err, data) => {
     if (err) {
-      res.status(500).send("Failed to fetch data");
+      res.status(403).send("Bad Token");
     } else {
-      console.log(user);
-      res.json({ data: user });
+      Users.findOne({ _id: userId }, (err, user) => {
+        if (err) {
+          res.status(500).send("Failed to fetch data");
+        } else {
+          console.log(user);
+          res.json({ data: user });
+        }
+      });
     }
   });
 });
 
 //Edit current user
 
-router.put("/:id", (req, res) => {
+router.put("/:id", verifyToken, (req, res) => {
   let userToEdit = req.params.id;
   const user = req.body;
 
-  Users.findOneAndUpdate(
-    { _id: userToEdit },
-    {
-      email: user.email,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      status: user.status,
-    },
-    // { upsert: true },
-    function (err, users) {
-      if (err) {
-        res.status(500).send("Edit Failed");
-      } else {
-        res.status(201).send("User Edited Successfully!");
-      }
+  jwt.verify(req.token, "mysecretkey", (err, data) => {
+    if (err) {
+      res.status(403).send("Bad Token");
+    } else {
+      Users.findOneAndUpdate(
+        { _id: userToEdit },
+        {
+          email: user.email,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          status: user.status,
+        },
+        // { upsert: true },
+        function (err, users) {
+          if (err) {
+            res.status(500).send("Edit Failed");
+          } else {
+            res.status(201).send("User Edited Successfully!");
+          }
+        }
+      );
     }
-  );
+  });
 });
 
 //Delete user
 
-router.delete("/:id", (req, res) => {
+router.delete("/:id", verifyToken, (req, res) => {
   const userToDelete = req.params.id;
 
-  Users.deleteOne({ _id: userToDelete }, (err, data) => {
+  jwt.verify(req.token, "mysecretkey", (err, data) => {
     if (err) {
-      res.status(500).send("Delete Failed");
+      res.status(403).send("Bad Token");
     } else {
-      res.send("User Deleted");
+      Users.deleteOne({ _id: userToDelete }, (err, data) => {
+        if (err) {
+          res.status(500).send("Delete Failed");
+        } else {
+          res.send("User Deleted");
+        }
+      });
     }
   });
 });
