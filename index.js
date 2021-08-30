@@ -1,11 +1,27 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const bodyParser = require("body-parser");
+const path = require("path");
+const multer = require("multer");
 
 // Create a new app & define its port or take it from the environment variables
 // in case of deployment.
 const app = express();
 const port = process.env.PORT || 8999;
+
+const storage = multer.diskStorage({
+  destination: "./images",
+  filename: (req, file, cb) => {
+    return cb(
+      null,
+      `${file.fieldname}_${Date.now()}${path.extname(file.originalname)}`
+    );
+  },
+});
+
+const upload = multer({
+  storage: storage,
+});
 
 //DB config
 const mongo_connectionURI =
@@ -48,6 +64,11 @@ app.use((req, res, next) => {
 app.use(express.urlencoded({ extended: false }));
 
 app.use("/users", require("./Routes/UsersRoute.js"));
+
+app.use("/avatar", express.static("./images"));
+app.post("/try", upload.single("avatar"), (req, res) => {
+  res.send({ avatar_url: `http://localhost:8999/images/${req.file.filename}` });
+});
 
 //Start the server listening on the above determined port.
 app.listen(port, () => console.log(`Server running locally on port: ${port}`));
